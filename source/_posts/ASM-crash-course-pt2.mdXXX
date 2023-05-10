@@ -1,0 +1,198 @@
+---
+title: ASM-crash-course-pt2
+date: 2023-03-30 00:23:21
+tags:
+---
+# Introduction
+
+Assuming you know a low-level programming language like C (low-level, when comparing to C++/Python/Java).
+
+The C language is relatively easy to read and understand.
+However, CPUs are not designed to directly understand one such language.
+CPUs are built up of digital components, where inputs and outputs are 1s and 0s.
+Thus, CPUs typically execute instructions in "Machine code".
+A machine code may look like "0000 0011 1011 0000".
+While this is easy to read for a CPU, it is difficult to read for humans.
+To make it a bit more readable, it can be expressed in hexadecimal: "0x03B0".
+But this is still not very easy to read and understand.
+If the CPU in question is an ATMega328P, as used in Arduino Uno, this instruction happens to be "IN R0, PINB".
+"IN R0, PINB" is the disassembled version of 0x03B0.
+This is the same instruction, but expressed in "Assembly language".
+The CPU does not understand assembly language directly, but, each machine code instruction can be represented by an assembly language instruction, and vice versa.
+The purpose is to make it easier for human programmers to understand the machine code instructions sent to the CPU.
+
+If you know how to write assembly code for a particular system, you can optimize your code for speed and/or size, or, have full control over what the CPU is executing.
+However, this comes with a cost. If you write software in assembly language, it is written in a very low-level language. Meaning that it will likely not work if you change compiler, CPU or peripherals (mainboard etc). And, there are fewer people who can maintain your code (there are many C compilers, but few assembly language programmers), the code is more difficult to test, and often, more difficult to read, compared to a well-written C program.
+
+In general, a good recommendation is to never use assembly language unless you really have to. At least for business purposes. But, if you like a challenge, or want to understand how things are working, or want to have full control over parts of your code (or all of it), assembly language programming can be a fun challenge! For example in the mentioned demo, where the size of the blink demo for Arduino was reduced from 924 bytes to 14 bytes! Being able to read assembly language is also useful for advanced diagnostics of compiled C language, where it is possible to examine the disassembled output from the compiler.
+
+
+## Different architectures
+
+Computers of today are general-purpose computers. In contrast to earlier computers, which were hardwired to do a single task only. A general-purpose computer can do a different task if you provide it with a different set of instructions (a different program).
+
+A typical arcitecture of these computers are the Von Neumann architecture. According to Wikipedia, this architecture contains
+- A processing unit with both an arithmetic logic unit and processor registers
+- A control unit that includes an instruction register and a program counter
+- Memory that stores data and instructions
+- External mass storage
+- Input and output mechanisms
+
+Another architecture is the Harvard architecture. Here, the instructions are stored in a dedicated instruction memory, while data is stored in a different data memory. Modified Harvard Architecture is a variation which also allows contents of the instruction memory to be accessed as data. AVR microcontrollers is an example of Modified Harvard Architecture.
+
+There have been made many different general-purpose CPUs, since the first was made in the 1950s. Some of these are similar to each other, and some are completely different.
+
+Architectures relevant today:
+- x64: Used on most computers today (64 bit)
+- x86: Used on older computers (32 bit)
+- ARM: Typically used on Android cell phones, Raspberry Pi, modern microcontrollers etc
+- AVR: Used on Arduino Uno
+
+Older, notable architectures:
+- 6502: Used on Commodore 64, Nintendo (NES)
+- Z80
+
+A computer with x64 or x86 architecture is a Complex Instruction Set Computer (CISC). These architectures have very many instructions, hence the name. Thus, a program may use fewer and more specific instructions to do a task. Finding the square root can for example be done with the FSQRT instruction.
+
+AVR, on the other hand, is a Reduced Instruction Set Computer (RISC). RISC processors have relatively few instructions, which makes the CPU itself more simpler, possibly cheaper, and easier to understand. The CPU have simple and straight forward instructions compared to a CISC processor, but you may have to use a few more instructions to do the same task. ATMega328p, used on Arduino Uno, have 131 assembly code instructions.
+
+
+## Building blocks of a CPU
+
+### DRAM and registers
+
+A DRAM is the storage of a single bit, and can be 1 or 0. The value is stored as a state, and can be read or written.
+
+A collection of DRAM units, typically 8/16/32/64 of them, makes a register. A CPU have several of them, serving different purposes. The registers contains the state of the CPU.
+
+One register is the Instruction Pointer (IP). This points to the current instruction in the program. Once an instruction is loaded, the instruction pointer increments, in order to load the next instruction. In some cases, you may want to jump to a different part of the code, this is done with an unconditional jump (JMP instruction). Then you specify the absolute or the relative address you want to jump to, and then the instruction pointer is set to this address instead of being incremented.
+
+The processor have general-purpose registers which can be used for temporary storage and math operations (arithmetic). As an example, you may want to load "5" to register A, "10" to register B, and store the sum in register C. In other words: "C = A + B". The destination is often also the first part of the sum, so that the result is stored back to register A. In other words: "A = A + B". In assembly language, this is typically written as "ADD A, B". This will take the sum of registers A and B, and store the result back to A, overwriting the old value. Similarly, you can subtract register B from A using the SUB instruction. "SUB A, B" performs the operation "A = A - B".
+
+
+### Flag registers and branching
+
+In addition to the general-purpose registers, the CPU also have a status/flag register, containing several status bits. If the result of a SUB instruction becomes 0, most CPUs will set their "zero flag" to true. If the result of a sum of two numbers becomes higher than the maximum value, the result overflows, and the overflow/carry flag is set. Similarly, if the result of a SUB instruction becomes less than 0, the result will wrap, and the overflow/carry flag is also set. This behavior is universal on most CPUs. These status bits will be kept until the next arithmetic instruction which affects these flags.
+
+The zero flag can be used for conditional branching/conditional jumping. You may want to jump to a specific part of the code if the content of register B is exactly the value "5". To do this, you manually load the value "5" to register A, then you subtract B from A (SUB A, B), then you jump if the zero flag is set. This is done using the BREQ(BRanch if EQual)/JE(Jump if Equal)/JZ(Jump if Zero) instruction. This works because the result of "5 - 5" equals 0, which sets the zero flag. You may also want to jump if the numbers are different, you then use the BRNE/JNE/JNZ (... not equal/not zero) instruction.
+
+The carry flag can be used for conditional branching if A is less than B. Then you can subtract B from A (SUB A, B), then you can jump if the carry flag is set. The carry flag will be set if A was less than B (as A - B in that case returns a number below 0). This is done with the BRLO(BRanch if LOwer)/BRCS(BRanch if Carry Set)/JB(Jump if Below)/JC(Jump if Carry). To check if A is equal to or higher than B, you can similarly check if carry flag is 0. BRSH(.. Same or Higher)/BRCC(.. Carry Clear)/JAE(.. Above or Equal)/JNC(.. Not Carry)
+
+When doing comparison between two registers in order to do conditional branching, you likely want to do a subtraction to get the flags, but you often do not want to modify the contents of one of the registers. Then, istead of the SUB instruction, you can use the CMP instruction. This sets the flags as if it was a SUB instruction, but does not modify any of the parameter registers.
+
+Carry may also be used when adding two 16 bit numbers on an 8 bit CPU. Then you first add the low bytes of the two numbers using ADD (ADD AL, BL), causing AL to contain the sum of AL and BL. Then you can add the high bytes of the two numbers, pluss the carry bit (set if overflow on the first add) using ADC (ADd with Carry) (ADC AH, BH). "Add with carry" can also be repeated multiple times, if the numbers consist of several bytes.
+
+### Stack register
+
+Most processors have a stack, and a Stack Pointer (SP) register. The main purpose of this, is to handle function calls. When calling a function in the code, it is possible to simply jump to the start of the function using a JMP instruction, and return from the function using another JMP instruction. However, by doing this, the function have to know forehand who is calling it and where to return afterwards. This also makes it impossible to call the same function from two different places in the code. Instead, you can use the CALL instruction. This will push the current address (Instruction Pointer) to the stack, and then jump to the function. Once the function is completed, you end it with the RET instruction. This will fetch one element back from the stack, which is the return address that was pushed when calling the JMP instruction. This causes the CPU to resume with the instruction immediately following the JMP instruction.
+
+The stack requires that there are RAM available. The system designer have to make a memory map of the system, and plan where in RAM the stack should be located. Then, the stack pointer is typically initialized to point to the highest address of the stack. Once a value is pushed to the stack, it is written to this address, and the stack pointer decrements. Once a value is popped from the stack, the stack pointer is incremented, and the popped value is read from the address pointed to by the stack pointer. This is implicitly done when using the CALL/RET functions. You can also push and pop working registers to the stack using PUSH and POP instructions. This can be done for temporary storage if the working registers cannot be used. It can also be used to provide function parameters when calling a function, or to allocate memory for local variables inside a function.
+
+Global variables are typically stored below the stack (which grows downwards). If the stack grows too much, it may overlap with the global variables and incorrectly modify those. This is referred to as a stack overflow, and may be a quite difficult problem to diagnose.
+
+
+### IO register
+
+To communicate with the CPU, you need some input and output registers. This can be the interface to a keyboard and a monitor, requiring electronic components in between. Early computers were much simpler, and would typically have a front panel with switches and LEDs, as this requires less electronics. Then, you could have an output register O consisting of 8 bits. Each bit is permanently connected to an LED. After a computation, where the result is in the general-purpose register A, you could write the result to the output register O using the instruction "OUT O, A". The result will immediately be visible using the LEDs.
+
+Similarly, you could hook up 8 switches to an input register, and for each CPU clock cycle, you could latch the state of each switch into the input register I. To read the input from input register I and into the general-purpose register A, you would use the instruction "IN A, I".
+
+Modern CPUs and microcontrollers have several peripherals to make input and output easier to do. The CPU may have built-in a parallel port on the CPU itself. Example: By writing to the 8-bit PORTB register of an AVR ATMega328P (Used on Arduino Uno), you can set the state of 8 output pins of the microcontroller simultaneously, using the instruction "OUT PORTB, R26". Similarly, if these pins are configured as input, you can read the same IO pins using "IN R26, PINB".
+
+Parallell IO can give very fast communication, but requires many IO pins. An alternative is serial communication, sending one bit at a time. A typical way of doing this is using UART. Then, both ends agrees on what speed to use (for example 9600 bits pr second). Then, a pattern of a startbit, 8 data bits (least significant first) and stop bit, is sent over the wire. This can be done in software using bit-banging, using the OUT or IN instruction to send or receive one bit at a time, which requires very precise timing and planning. However, modern microcontrollers often includes dedicated hardware which can do this automatically. Using the mentioned AVR ATMega328P, you can use the built-in serial hardware (USART0) to send one byte, assuming you have configured the hardware properly (speed and IO pin configurations, using config registers). To send the byte stored in the R26 register, simply use the command "OUT UDR0, R26". Similarly, you can read the last received byte by using the command "IN R26, UDR0". Other peripherals often included in modern microcontrollers is I2C/TWI and SPI.
+
+### Arithmetic Logic Unit (ALU)
+
+The ALU is the math unit of the CPU. It typically takes two input parameters named A and B (two general-purpose registers), and computes an output Y. The output is chosen by a function selector/opcode.
+
+#### Examples:
+
+- Arithmetic: addition (A+B), subtraction (A-B), add with carry (A+B+c), increment (A+1), two's complement/negative (-A)
+- Bitwise logical: bitwise and (A&B), bitwise or (A|B), bitwise xor (A^B), one's complement/bitwise not (~A)
+- Bit shift: logical shift left/right (A<<1 (unsigned)), arithmetic shift (signed), rotate, rotate through carry
+
+The ALU will typically compute all these values in parallel, and use a multiplexer to select the relevant output.
+
+### Assembly Instructions
+
+With the typical building blocks in place, we can check what kind of instructions there are, loosely based on the RISC processor AVR ATMega328P.
+
+#### Arithmetic and logic operations
+
+ADD/SUB - Add/subtract two registers
+ADC/SBC - Add/subtract two registers with carry
+ADIW/SBIW - Add/subtract immediate (constant number) to/from word (16-bit, using two 8-bit registers)
+SUBI - Subtract immediate (constant number) from register
+SBCI - Subtract with carry immediate (constant) from register
+AND/OR/EOR - Logical AND/OR/XOR registers
+ANDI/ORI - Logical AND/OR register and immediate (constant)
+COM - One's complement (bitwise invert all bits, !A)
+NEG - Two's complement (arithmetic negate number, -A)
+SBR/CBR - Set/clear bit(s) in register
+INC/DEC - Increment/decrement register
+TST - Test for zero or minus (set zero and sign flag)
+CLR/SER - Clear/set register (set to 0/255)
+MUL/MULS/MULSU - Multiply unsigned/signed/signed with unsigned
+FMUL/FMULS/FMULSU - Fractional multiply unsigned/signed/signed with unsigned
+
+#### Branch instructions
+
+JMP/RJMP/IJMP - Jump, absolute address/relative address/indirect address (stored in Z register)
+CALL/RCALL/ICALL - Call, absolute/relative/indirect
+RET - Return
+RETI - Return from interrupt (setting interrupt flag)
+CP - Compare (setting flags eqvivalent to SUB)
+CPC - Compare with carry (similar to SBC)
+CPI - Compare register with immediate (similar to SUBI)
+CPSE - Compare two registers, skip next instruction if equal
+SBRC/SBRS - Skip next instruction if bit in register is cleared/set
+SBIC/SBIS - Skip if bit in IO register is cleared/set
+BRBS/BRBC - Branch if status flag is set/cleared
+BREQ/BRNE - Branch if equal/not equal (zero flag Z)
+BRCS/BRCC - Branch if carry set/clear (carry flag C)
+BRSH/BRLO - Branch if same or higher/lower (carry flag C)
+BRMI/BRPL - minus/plus (negative flag N)
+BRGE/BRLT - greater or equal/less than zero (signed) (sign bit S)
+BRHS/BRHC - (half carry flag H, mainly useful for BCD arithmetic)
+BRTS/BRTC - (T flag, temporary bit storage)
+BRVS/BRVC - (overflow flag V)
+BRIE/BRID - (interrupt flag I)
+
+#### Bit and bit test instructions
+
+SBI/CBI - Set/Clear bit in IO register
+LSL/LSR - Logical shift register left/right (unsigned)
+ROL/ROR - Rotate register left/right through carry
+ASR - Arithmetic shift right (signed)
+SWAP - Swap nibbles
+BSET/BCLR - Set/clear bit in SREG
+BST/BLD - Store bit from register to T/load bit from T to register
+SEC/CLC - Set/clear carry (C)
+SEN/CLN - Set/clear negative (N)
+SEZ/CLZ - zero (Z)
+SEI/CLI - interrupt enable (I)
+SES/CLS - signed test (S)
+SEV/CLV - twos complement overflow (V)
+SET/CLT - T flag (T)
+SEH/CLH - half carry (H)
+
+#### Data transfer instructions
+
+MOV - Move between registers
+MOVW - Copy word (two registers at once)
+LDI - Load immediate (constant) to register
+LDS/STS - Load/store register direct from/to SRAM address
+LD/ST X/Y/Z - Load/store register indirect from/to X/Y/Z pointer register
+LD/ST X+/Y+/Z+ - Load/store register indirect from X/Y/Z pointer register and post-increment
+LD/ST -X/-Y/-Z - Load/store register indirect from X/Y/Z pointer register and pre-decrement
+LDD/STD Y+q/Z+q - Load/store register indirect from Y/Z pointer register with displacement
+LPM/SPM - Load/store from/to program memory
+IN/OUT - Read from IO port to register/write to IO port from register
+PUSH/POP - Push/pop register to/from stack
+
+#### MCU control instructions
+
+NOP - No operation
+SLEEP - Sleep
+WDR - Watchdog reset
+BREAK - Break
